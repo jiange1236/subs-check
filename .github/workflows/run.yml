@@ -27,9 +27,17 @@ jobs:
     - name: Docker Setup Docker
       uses: docker/setup-docker-action@v4
 
-    - name: Docker Run
+    - name: Run Docker container 
+      env:
+        CONFIG_CONTENT: ${{ secrets.CONFIG_YAML }}
       run: |
-        docker run -d --name subs-check -p 8199:8199 -v ./config:/app/config  -v ./output:/app/output --restart always ghcr.io/beck-8/subs-check:latest
+        docker run --rm -v $GITHUB_WORKSPACE/config:/app/config ghcr.io/beck-8/subs-check:latest  mkdir -p /app/config
+        docker run -d --name subs-check \
+          -e CONFIG_CONTENT="$CONFIG_CONTENT" \
+          -v $GITHUB_WORKSPACE/config:/app/config \
+          -v $GITHUB_WORKSPACE/output:/app/output \
+          ghcr.io/beck-8/subs-check:latest  \
+          sh -c 'echo "$CONFIG_CONTENT" > /app/config/config.yaml && /app/main' 
 
     - name: Wait for the service to be up
       run: |
