@@ -41,7 +41,7 @@ jobs:
 
     - name: Wait for the service to be up
       run: |
-        sleep 300 # 等待容器启动
+        sleep 3000 # 等待容器启动
         docker logs subs-check
 
 
