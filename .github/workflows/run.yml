@@ -4,12 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "40 22 * * *"
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - "README.md"
-      - "LICENSE"
       
 permissions:
   contents: write
@@ -41,7 +35,7 @@ jobs:
 
     - name: Wait for the service to be up
       run: |
-        sleep 3000 # 等待容器启动
+        sleep 1000 # 等待容器启动
         docker logs subs-check
 
 
