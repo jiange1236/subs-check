@@ -42,10 +42,14 @@ jobs:
       run: |
         sleep 1000 # 等待容器启动
         docker logs subs-check
+        mkdir -p publish
+        cd $GITHUB_WORKSPACE/output
+        mv *.m3u publish
+        cp -rv $GITHUB_WORKSPACE/output/* publish/
         
     - name: Git push assets to "release" branch
       run: | 
-        cd $GITHUB_WORKSPACE/output || exit 1
+        cd publish || exit 1
         git init
         git config --local user.name "github-actions[bot]"
         git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
