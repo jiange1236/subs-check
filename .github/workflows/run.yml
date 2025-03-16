@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Set variables
+      run: |
+          echo "RELEASE_NAME=Released on $(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+      shell: bash
+
     - name: Checkout code
       uses: actions/checkout@v4
     
@@ -37,5 +42,17 @@ jobs:
       run: |
         sleep 1000 # 等待容器启动
         docker logs subs-check
+        
+    - name: Git push assets to "release" branch
+      run: | 
+        cd $GITHUB_WORKSPACE/output || exit 1
+        git init
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git checkout -b release
+        git add .
+        git commit -m "${{ env.RELEASE_NAME }}"
+        git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+        git push -f -u origin release
 
 
