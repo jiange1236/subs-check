@@ -18,25 +18,6 @@ const handleError = (message, status = 500) => {
 };
 
 const routeHandlers = {
-    async updatetime(request, env) {
-        try {
-            const response = await fetch(`https://api.github.com/gists/${env.GITHUB_ID}`, {
-                headers: new Headers(request.headers),
-                method: "GET",
-            });
-            const data = await response.json();
-            const shanghaiTime = new Date(data.updated_at)
-                .toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-
-            return createResponse({
-                status: 200,
-                message: "获取成功",
-                data: { lastUpdate: shanghaiTime }
-            });
-        } catch (error) {
-            return handleError('获取更新时间失败: ' + error.message);
-        }
-    },
 
     async github(request, url) {
         try {
@@ -65,7 +46,7 @@ const routeHandlers = {
         }
     },
 
-    async bestrui(request, url, env) {
+    async gist(request, url, env) {
         if (!await validateToken(url, env)) {
             return handleError('未授权访问', 401);
         }
@@ -116,6 +97,32 @@ const routeHandlers = {
         }
 
         return handleError('不支持的请求方法', 405);
+    },
+    async speedtest(request, url, env) {
+        try {
+            const bytes = url.searchParams.get('bytes');
+            if (!bytes) {
+                return handleError('请提供测试大小(bytes)', 400);
+            }
+
+            const speedTestUrl = `https://speed.cloudflare.com/__down?bytes=${bytes}`;
+            const response = await fetch(speedTestUrl, {
+                method: request.method,
+                headers: request.headers
+            });
+
+            return new Response(response.body, {
+                status: response.status,
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                    'Content-Type': 'application/octet-stream'
+                }
+            });
+        } catch (error) {
+            return handleError('测速失败: ' + error.message);
+        }
     }
 };
 
@@ -152,10 +159,10 @@ export default {
             const pathname = url.pathname;
 
             const routes = {
-                '/updatetime': () => routeHandlers.updatetime(request, env),
                 '/github/': () => routeHandlers.github(request, url),
-                '/bestrui': () => routeHandlers.bestrui(request, url, env),
-                '/storage': () => routeHandlers.storage(request, url, env)
+                '/gist': () => routeHandlers.gist(request, url, env),
+                '/storage': () => routeHandlers.storage(request, url, env),
+                '/speedtest': () => routeHandlers.speedtest(request, url, env)
             };
 
             for (const [route, handler] of Object.entries(routes)) {

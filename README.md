@@ -54,6 +54,17 @@
 > 因为上游订阅链接可能是爬虫，所以本地可用的节点经常被刷新掉，所以可以使用 `keep-success-proxies` 参数持久保存测试成功的节点
 > 此参数默认关闭。并且会将数据临时存放到内存中，如果可用节点数量非常多，请不要打开此参数（因为可能会占用一点内存）。可将生成的链接添加到测试链接当中一样可以实现此效果
 
+### 自建测速地址（可选）
+> 尽量不要使用Speedtest，Cloudflare提供的下载链接，因为很多节点屏蔽测速网站
+1. 将 [worker.js](./doc/cloudflare/worker.js) 部署到 Cloudflare Workers
+2. 绑定自定义域名（目的是为了不被节点屏蔽）
+3. 将 speed-test-url 配置为你的 worker自定义域名地址
+```bash
+# 100MB
+speed-test-url: https://custom-domain/speedtest?bytes=104857600
+# 1GB
+speed-test-url: https://custom-domain/speedtest?bytes=1073741824
+```
 ### docker运行
 
 ```bash

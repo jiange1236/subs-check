@@ -13,8 +13,9 @@ func DeduplicateProxies(proxies []map[string]any) []map[string]any {
 		if server == "" {
 			continue
 		}
+		servername, _ := proxy["servername"].(string)
 
-		key := fmt.Sprintf("%s:%v", server, port)
+		key := fmt.Sprintf("%s:%v:%s", server, port, servername)
 		seen[key] = proxy
 	}
 
