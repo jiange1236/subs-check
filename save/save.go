@@ -13,6 +13,7 @@ import (
 
 	"github.com/beck-8/subs-check/check"
 	"github.com/beck-8/subs-check/config"
+	"github.com/beck-8/subs-check/proxy/parser"
 	"github.com/beck-8/subs-check/save/method"
 	"github.com/buger/jsonparser"
 	"gopkg.in/yaml.v3"
@@ -194,24 +195,6 @@ func genUrls(data []byte) (*bytes.Buffer, error) {
 			return
 		}
 
-		// 如果是vmess，则将raw字段base64编码，直接返回
-		if t == "vmess" {
-			raw, _, _, err := jsonparser.Get(value, "raw")
-			if err != nil {
-				slog.Debug(fmt.Sprintf("获取raw字段失败: %s", err))
-				return
-			}
-			// 因为vmess是json格式，前边的重命名对这里边不起作用，这里单独处理
-			raw, err = jsonparser.Set(raw, []byte(fmt.Sprintf(`"%s"`, name)), "ps")
-			if err != nil {
-				slog.Debug(fmt.Sprintf("修改vmess ps字段失败: %s", err))
-				return
-			}
-			urls.WriteString("vmess://")
-			urls.WriteString(base64.StdEncoding.EncodeToString(raw))
-			urls.WriteByte('\n')
-			return
-		}
 		password, err := jsonparser.GetString(value, "password")
 		if err != nil {
 			if err == jsonparser.KeyPathNotFoundError {
@@ -254,6 +237,68 @@ func genUrls(data []byte) (*bytes.Buffer, error) {
 			url := server + ":" + strconv.Itoa(int(port)) + ":" + protocol + ":" + cipher + ":" + obfs + ":" + password + "/?obfsparam=" + base64.URLEncoding.EncodeToString([]byte(obfsParam)) + "&protoparam=" + base64.URLEncoding.EncodeToString([]byte(protoParam)) + "&remarks=" + name
 
 			urls.WriteString("ssr://" + base64.StdEncoding.EncodeToString([]byte(url)))
+			urls.WriteByte('\n')
+			return
+		}
+		// 如果是vmess，则将raw字段base64编码，直接返回
+		if t == "vmess" {
+			raw, _, _, err := jsonparser.Get(value, "raw")
+			if err != nil {
+				if err != jsonparser.KeyPathNotFoundError {
+					slog.Debug(fmt.Sprintf("获取raw字段失败: %s", err))
+					return
+				}
+
+				aid, _ := jsonparser.GetInt(value, "aid")
+				network, _ := jsonparser.GetString(value, "network")
+				tls, _ := jsonparser.GetBoolean(value, "tls")
+				servername, _ := jsonparser.GetString(value, "servername")
+				alpn, _, _, _ := jsonparser.Get(value, "alpn")
+				host, _ := jsonparser.GetString(value, "ws-opts", "headers", "Host")
+				path, _ := jsonparser.GetString(value, "ws-opts", "path")
+				vmess := parser.VmessJson{
+					V:    "2",
+					Ps:   name,
+					Add:  server,
+					Port: port,
+					Id:   password,
+					Aid:  aid,
+					Scy:  "auto",
+					Net:  network,
+					Type: func() string {
+						if network == "http" {
+							return "http"
+						} else {
+							return ""
+						}
+					}(),
+					Host: host,
+					Path: path,
+					Tls: func() string {
+						if tls {
+							return "tls"
+						} else {
+							return "none"
+						}
+					}(),
+					Sni:  servername,
+					Alpn: string(alpn),
+					Fp:   "chrome",
+				}
+				d, _ := json.Marshal(vmess)
+				urls.WriteString("vmess://")
+				urls.WriteString(base64.StdEncoding.EncodeToString(d))
+				urls.WriteByte('\n')
+				return
+			}
+			// 因为vmess是json格式，前边的重命名对这里边不起作用，这里单独处理
+			raw, err = jsonparser.Set(raw, []byte(fmt.Sprintf(`"%s"`, name)), "ps")
+			if err != nil {
+				slog.Debug(fmt.Sprintf("修改vmess ps字段失败: %s", err))
+				return
+			}
+			urls.WriteString("vmess://")
+			urls.WriteString(base64.StdEncoding.EncodeToString(raw))
 			urls.WriteByte('\n')
 			return
 		}

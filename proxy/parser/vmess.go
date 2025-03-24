@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-type vmessJson struct {
+type VmessJson struct {
 	V    any    `json:"v"`
 	Ps   string `json:"ps"`
 	Add  string `json:"add"`
@@ -46,7 +46,7 @@ func ParseVmess(data string) (map[string]any, error) {
 		return nil, err
 	}
 	// 解析JSON
-	var vmessInfo vmessJson
+	var vmessInfo VmessJson
 	if err := json.Unmarshal(decoded, &vmessInfo); err != nil {
 		slog.Debug(fmt.Sprintf("json解析失败: %s , 原数据：%s", err, string(decoded)))
 		return nil, err
