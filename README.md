@@ -243,7 +243,7 @@ http://127.0.0.1:8299/api/file/mihomo
 > 小白勿看！！！  
 > 这个依赖github上的yaml文件进行覆写  
 > 默认使用: `https://slink.ltd/https://raw.githubusercontent.com/mihomo-party-org/override-hub/main/yaml/ACL4SSR_Online_Full.yaml`  
-> 如果遇到无法下载或者想使用其他格式，可以自己进后端管理配置，此处是判断是否有mihomo这个file，不管内容是什么，所以你做的更改不会被覆盖。  
+> 如果遇到无法下载或者想使用其他格式，更改配置中的`mihomo-overwrite-url`即可
 
 如果你还有什么其他的需求，使用上方的通用订阅自己处理，或者学习[sub-store](https://github.com/sub-store-org/sub-store-docs)中的文件管理，可以写任意插件，功能真的很强大！！！
 
@@ -270,6 +270,9 @@ proxy-providers:
       interval: 60
     path: ./proxy_provider/ALL.yaml
 ```
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=beck-8/subs-check&type=Date)](https://www.star-history.com/#beck-8/subs-check&Date)
 ## 免责声明
 
 本工具仅用于学习和研究目的。使用者应自行承担使用风险，并遵守相关法律法规。
