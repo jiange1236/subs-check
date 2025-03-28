@@ -163,17 +163,17 @@ func (cs *ConfigSaver) saveCategory(category ProxyCategory) error {
 		return nil
 	}
 	if category.Name == "mihomo.yaml" && config.GlobalConfig.SubStorePort != "" {
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/api/file/%s", config.GlobalConfig.SubStorePort, utils.MihomoName))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1%s/api/file/%s", config.GlobalConfig.SubStorePort, utils.MihomoName))
 		if err != nil {
 			return fmt.Errorf("获取mihomo file请求失败: %w", err)
 		}
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("获取mihomo file失败，状态码: %w", err)
-		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("读取mihomo file失败: %w", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("获取mihomo file失败, 状态码: %d, 错误信息: %s", resp.StatusCode, body)
 		}
 		if err := cs.saveMethod(body, category.Name); err != nil {
 			return fmt.Errorf("保存 %s 失败: %w", category.Name, err)
@@ -182,13 +182,13 @@ func (cs *ConfigSaver) saveCategory(category ProxyCategory) error {
 	}
 	if category.Name == "base64.txt" && config.GlobalConfig.SubStorePort != "" {
 		// http://127.0.0.1:8299/download/sub?target=V2Ray
-		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%s/download/%s?target=V2Ray", config.GlobalConfig.SubStorePort, utils.SubName))
+		resp, err := http.Get(fmt.Sprintf("http://127.0.0.1%s/download/%s?target=V2Ray", config.GlobalConfig.SubStorePort, utils.SubName))
 		if err != nil {
 			return fmt.Errorf("获取base64.txt请求失败: %w", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("获取base64.txt失败，状态码: %w", err)
+			return fmt.Errorf("获取base64.txt失败，状态码: %d", resp.StatusCode)
 		}
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {

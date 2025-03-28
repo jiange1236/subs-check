@@ -21,14 +21,14 @@
     - ~~netflix~~
     - ~~disney~~
 - 合并多个订阅
-- 将订阅转换为clash/mihomo/base64格式
+- 将订阅转换为clash/mihomo/base64/QX等等[任意格式的订阅](https://github.com/beck-8/subs-check?tab=readme-ov-file#%E8%AE%A2%E9%98%85%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95)
 - 节点去重
 - 节点重命名
 - 节点测速（单线程）
-- 根据解锁情况分类保存
+- ~~根据解锁情况分类保存~~
 - 支持外部拉取结果（默认监听 :8199）（弃用）
 - 支持100+ 个通知渠道 通知检测结果
-- 内置sub-store程序
+- 内置sub-store程序（默认监听 :8299）
 
 ## 特点
 
@@ -149,6 +149,7 @@ go run main.go -f /path/to/config.yaml
 3. 请将你的Vercel项目添加一个自定义域名，因为Vercel在国内几乎访问不了
 
 ### docker部署
+> 不支持 arm/v7
 ```bash
 docker run --name apprise -p 8000:8000 --restart always -d caronc/apprise:latest
 ```
