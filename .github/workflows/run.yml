@@ -1,0 +1,59 @@
+name: subs-check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 22 * * *"
+      
+permissions:
+  contents: write
+  packages: write
+  actions: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set variables
+      run: |
+          echo "RELEASE_NAME=Released on $(date +%Y%m%d%H%M)" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Docker Setup Docker
+      uses: docker/setup-docker-action@v4
+
+    - name: Run Docker container 
+      env:
+        CONFIG_CONTENT: ${{ secrets.CONFIG_YAML }}
+      run: |
+        docker run --rm -v $GITHUB_WORKSPACE/config:/app/config ghcr.io/beck-8/subs-check:latest  mkdir -p /app/config
+        docker run -d --name subs-check \
+          -e CONFIG_CONTENT="$CONFIG_CONTENT" \
+          -v $GITHUB_WORKSPACE/config:/app/config \
+          -v $GITHUB_WORKSPACE/output:/app/output \
+          ghcr.io/beck-8/subs-check:latest  \
+          sh -c 'echo "$CONFIG_CONTENT" > /app/config/config.yaml && /app/main' 
+    - name: Wait for the service to be up
+      run: |
+        sleep 1500 # 等待容器启动
+        docker logs subs-check
+#        mkdir -p publish
+#        cd $GITHUB_WORKSPACE/output
+#        mv *.m3u publish
+#        cp -rv $GITHUB_WORKSPACE/output/* publish/
+        
+#    - name: Git push assets to "release" branch
+#      run: | 
+#        cd publish || exit 1
+#        git init
+#        git config --local user.name "github-actions[bot]"
+#        git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+#        git checkout -b release
+#        git add .
+#        git commit -m "${{ env.RELEASE_NAME }}"
+#        git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+#        git push -f -u origin release
