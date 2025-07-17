@@ -3,6 +3,7 @@ package check
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"net/http"
@@ -28,12 +29,13 @@ import (
 type Result struct {
 	Proxy      map[string]any
 	Openai     bool
-	Youtube    bool
+	Youtube    string
 	Netflix    bool
 	Google     bool
 	Cloudflare bool
 	Disney     bool
 	Gemini     bool
+	TikTok     string
 	IP         string
 	IPRisk     string
 	Country    string
@@ -53,7 +55,7 @@ type ProxyChecker struct {
 var Progress atomic.Uint32
 var Available atomic.Uint32
 var ProxyCount atomic.Uint32
-var TotalBytes atomic.Int64
+var TotalBytes atomic.Uint64
 
 var ForceClose atomic.Bool
 
@@ -160,9 +162,7 @@ func (pc *ProxyChecker) run(proxies []map[string]any) ([]Result, error) {
 		slog.Warn(fmt.Sprintf("达到节点数量限制: %d", config.GlobalConfig.SuccessLimit))
 	}
 	slog.Info(fmt.Sprintf("可用节点数量: %d", len(pc.results)))
-	if config.GlobalConfig.SpeedTestUrl != "" {
-		slog.Info(fmt.Sprintf("测速总消耗流量: %.2fGB", float64(TotalBytes.Load())/1024/1024/1024))
-	}
+	slog.Info(fmt.Sprintf("测试总消耗流量: %.3fGB", float64(TotalBytes.Load())/1024/1024/1024))
 
 	// 检查订阅成功率并发出警告
 	pc.checkSubscriptionSuccessRate(proxies)
@@ -210,10 +210,8 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 	}
 
 	var speed int
-	var totalBytes int64
 	if config.GlobalConfig.SpeedTestUrl != "" {
-		speed, totalBytes, err = platform.CheckSpeed(httpClient.Client, Bucket)
-		TotalBytes.Add(totalBytes)
+		speed, _, err = platform.CheckSpeed(httpClient.Client, Bucket)
 		if err != nil || speed < config.GlobalConfig.MinSpeed {
 			return nil
 		}
@@ -228,8 +226,8 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 					res.Openai = true
 				}
 			case "youtube":
-				if ok, _ := platform.CheckYoutube(httpClient.Client); ok {
-					res.Youtube = true
+				if region, _ := platform.CheckYoutube(httpClient.Client); region != "" {
+					res.Youtube = region
 				}
 			case "netflix":
 				if ok, _ := platform.CheckNetflix(httpClient.Client); ok {
@@ -256,6 +254,10 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 				} else {
 					// 失败的可能性高，所以放上日志
 					slog.Debug(fmt.Sprintf("查询IP风险失败: %v", err))
+				}
+			case "tiktok":
+				if region, _ := platform.CheckTikTok(httpClient.Client); region != "" {
+					res.TikTok = region
 				}
 			}
 		}
@@ -296,26 +298,29 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 
 	if config.GlobalConfig.MediaCheck {
 		// 移除已有的标记（IPRisk和平台标记）
-		name = regexp.MustCompile(`\s*\|(?:Netflix|Disney|Youtube|Openai|Gemini|\d+%)`).ReplaceAllString(name, "")
+		name = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`).ReplaceAllString(name, "")
 	}
 	// 添加其他标记
 	if res.IPRisk != "" {
 		tags = append(tags, res.IPRisk)
 	}
 	if res.Netflix {
-		tags = append(tags, "Netflix")
+		tags = append(tags, "NF")
 	}
 	if res.Disney {
-		tags = append(tags, "Disney")
-	}
-	if res.Youtube {
-		tags = append(tags, "Youtube")
+		tags = append(tags, "D+")
 	}
 	if res.Openai {
-		tags = append(tags, "Openai")
+		tags = append(tags, "GPT")
 	}
 	if res.Gemini {
-		tags = append(tags, "Gemini")
+		tags = append(tags, "GM")
+	}
+	if res.Youtube != "" {
+		tags = append(tags, fmt.Sprintf("YT-%s", res.Youtube))
+	}
+	if res.TikTok != "" {
+		tags = append(tags, fmt.Sprintf("TK-%s", res.TikTok))
 	}
 
 	// 将所有标记添加到名称中
@@ -389,61 +394,6 @@ func (pc *ProxyChecker) collectResults() {
 	}
 }
 
-// CreateClient creates and returns an http.Client with a Close function
-type ProxyClient struct {
-	*http.Client
-	proxy constant.Proxy
-}
-
-func CreateClient(mapping map[string]any) *ProxyClient {
-	proxy, err := adapter.ParseProxy(mapping)
-	if err != nil {
-		slog.Debug(fmt.Sprintf("底层mihomo创建代理Client失败: %v", err))
-		return nil
-	}
-
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			host, port, err := net.SplitHostPort(addr)
-			if err != nil {
-				return nil, err
-			}
-			var u16Port uint16
-			if port, err := strconv.ParseUint(port, 10, 16); err == nil {
-				u16Port = uint16(port)
-			}
-			return proxy.DialContext(ctx, &constant.Metadata{
-				Host:    host,
-				DstPort: u16Port,
-			})
-		},
-		IdleConnTimeout:   time.Duration(config.GlobalConfig.Timeout) * time.Millisecond,
-		DisableKeepAlives: true,
-	}
-
-	return &ProxyClient{
-		Client: &http.Client{
-			Timeout:   time.Duration(config.GlobalConfig.Timeout) * time.Millisecond,
-			Transport: transport,
-		},
-		proxy: proxy,
-	}
-}
-
-// Close closes the proxy client and cleans up resources
-// 防止底层库有一些泄露，所以这里手动关闭
-func (pc *ProxyClient) Close() {
-	if pc.Client != nil {
-		pc.Client.CloseIdleConnections()
-	}
-
-	// 即使这里不关闭，底层GC的时候也会自动关闭
-	if pc.proxy != nil {
-		pc.proxy.Close()
-	}
-	pc.Client = nil
-}
-
 // checkSubscriptionSuccessRate 检查订阅成功率并发出警告
 func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any) {
 	// 统计每个订阅的节点总数和成功数
@@ -492,4 +442,97 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 			}
 		}
 	}
+}
+
+// CreateClient creates and returns an http.Client with a Close function
+type ProxyClient struct {
+	*http.Client
+	proxy     constant.Proxy
+	Transport *StatsTransport
+}
+
+func CreateClient(mapping map[string]any) *ProxyClient {
+	proxy, err := adapter.ParseProxy(mapping)
+	if err != nil {
+		slog.Debug(fmt.Sprintf("底层mihomo创建代理Client失败: %v", err))
+		return nil
+	}
+
+	baseTransport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			var u16Port uint16
+			if port, err := strconv.ParseUint(port, 10, 16); err == nil {
+				u16Port = uint16(port)
+			}
+			return proxy.DialContext(ctx, &constant.Metadata{
+				Host:    host,
+				DstPort: u16Port,
+			})
+		},
+		DisableKeepAlives: true,
+	}
+
+	statsTransport := &StatsTransport{
+		Base: baseTransport,
+	}
+	return &ProxyClient{
+		Client: &http.Client{
+			Timeout:   time.Duration(config.GlobalConfig.Timeout) * time.Millisecond,
+			Transport: statsTransport,
+		},
+		proxy:     proxy,
+		Transport: statsTransport,
+	}
+}
+
+// Close closes the proxy client and cleans up resources
+// 防止底层库有一些泄露，所以这里手动关闭
+func (pc *ProxyClient) Close() {
+	if pc.Client != nil {
+		pc.Client.CloseIdleConnections()
+	}
+
+	// 即使这里不关闭，底层GC的时候也会自动关闭
+	if pc.proxy != nil {
+		pc.proxy.Close()
+	}
+	pc.Client = nil
+
+	if pc.Transport != nil {
+		TotalBytes.Add(atomic.LoadUint64(&pc.Transport.BytesRead))
+	}
+	pc.Transport = nil
+}
+
+type countingReadCloser struct {
+	io.ReadCloser
+	counter *uint64
+}
+
+func (c *countingReadCloser) Read(p []byte) (int, error) {
+	n, err := c.ReadCloser.Read(p)
+	atomic.AddUint64(c.counter, uint64(n))
+	return n, err
+}
+
+type StatsTransport struct {
+	Base      http.RoundTripper
+	BytesRead uint64
+}
+
+func (s *StatsTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := s.Base.RoundTrip(req)
+	if err != nil {
+		return nil, err
+	}
+
+	resp.Body = &countingReadCloser{
+		ReadCloser: resp.Body,
+		counter:    &s.BytesRead,
+	}
+	return resp, nil
 }
