@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -14,8 +15,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"log/slog"
 
 	"github.com/beck-8/subs-check/check/platform"
 	"github.com/beck-8/subs-check/config"
@@ -29,6 +28,7 @@ import (
 type Result struct {
 	Proxy      map[string]any
 	Openai     bool
+	OpenaiWeb  bool
 	Youtube    string
 	Netflix    bool
 	Google     bool
@@ -222,8 +222,11 @@ func (pc *ProxyChecker) checkProxy(proxy map[string]any) *Result {
 		for _, plat := range config.GlobalConfig.Platforms {
 			switch plat {
 			case "openai":
-				if ok, _ := platform.CheckOpenai(httpClient.Client); ok {
+				cookiesOK, clientOK := platform.CheckOpenAI(httpClient.Client)
+				if clientOK && cookiesOK {
 					res.Openai = true
+				} else if cookiesOK || clientOK {
+					res.OpenaiWeb = true
 				}
 			case "youtube":
 				if region, _ := platform.CheckYoutube(httpClient.Client); region != "" {
@@ -298,7 +301,7 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 
 	if config.GlobalConfig.MediaCheck {
 		// 移除已有的标记（IPRisk和平台标记）
-		name = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`).ReplaceAllString(name, "")
+		name = regexp.MustCompile(`\s*\|(?:NF|D\+|GPT⁺|GPT|GM|YT-[^|]+|TK-[^|]+|\d+%)`).ReplaceAllString(name, "")
 	}
 
 	// 按用户输入顺序定义
@@ -306,6 +309,8 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 		switch plat {
 		case "openai":
 			if res.Openai {
+				tags = append(tags, "GPT⁺")
+			} else if res.OpenaiWeb {
 				tags = append(tags, "GPT")
 			}
 		case "netflix":
@@ -335,9 +340,13 @@ func (pc *ProxyChecker) updateProxyName(res *Result, httpClient *ProxyClient, sp
 		}
 	}
 
+	if tag := res.Proxy["sub_tag"].(string); tag != "" {
+		tags = append(tags, tag)
+	}
+
 	// 将所有标记添加到名称中
 	if len(tags) > 0 {
-		name += " |" + strings.Join(tags, "|")
+		name += "|" + strings.Join(tags, "|")
 	}
 
 	res.Proxy["name"] = name
@@ -362,7 +371,7 @@ func (pc *ProxyChecker) showProgress(done chan bool) {
 
 			// if 0/0 = NaN ,shoule panic
 			percent := float64(current) / float64(pc.proxyCount) * 100
-			fmt.Printf("\r进度: [%-50s] %.1f%% (%d/%d) 可用: %d",
+			fmt.Printf("\r进度: [%-45s] %.1f%% (%d/%d) 可用: %d",
 				strings.Repeat("=", int(percent/2))+">",
 				percent,
 				current,
@@ -416,7 +425,7 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 
 	// 统计所有节点的订阅来源
 	for _, proxy := range allProxies {
-		if subUrl, ok := proxy["subscription_url"].(string); ok {
+		if subUrl, ok := proxy["sub_url"].(string); ok {
 			stats := subStats[subUrl]
 			stats.total++
 			subStats[subUrl] = stats
@@ -426,12 +435,13 @@ func (pc *ProxyChecker) checkSubscriptionSuccessRate(allProxies []map[string]any
 	// 统计成功节点的订阅来源
 	for _, result := range pc.results {
 		if result.Proxy != nil {
-			if subUrl, ok := result.Proxy["subscription_url"].(string); ok {
+			if subUrl, ok := result.Proxy["sub_url"].(string); ok {
 				stats := subStats[subUrl]
 				stats.success++
 				subStats[subUrl] = stats
 			}
-			delete(result.Proxy, "subscription_url")
+			delete(result.Proxy, "sub_url")
+			delete(result.Proxy, "sub_tag")
 		}
 	}
 
